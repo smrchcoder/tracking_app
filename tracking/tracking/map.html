@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Realtime GPS Tracker</title>
+    <script src="https://cdn.pubnub.com/sdk/javascript/pubnub.4.19.0.min.js"></script>
+    <link rel="stylesheet" href="map.css">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl" crossorigin="anonymous"></script>
+</head>
+<body>
+<div class="bg"></div>
+<div class="bg-others">
+    <div class="container">
+        <h1>Realtime GPS Tracker with Raspberry PI</h1>
+        <center><hr style="height:2px; border:none; color:#ffffff; background-color:#ffffff; width:35%; margin: 0 auto 0 auto;"></center>
+        <p>by Arjunagi Ayush Avishi</p>
+        <center><button class="btn btn-success col-sm-3" id="action">Start Tracking</button></center><br>
+        <center><div id="map-canvas"></div></center>
+    </div>
+</div>
+
+<script>
+    var map;
+    var mark;
+    var lineCoords = [];
+    
+    var initializeMap = function() {
+        var lat = 47.7850;
+        var lng = -132.4383;
+        
+        map = new google.maps.Map(document.getElementById('map-canvas'), {
+            center: { lat: lat, lng: lng },
+            zoom: 12
+        });
+        
+        mark = new google.maps.Marker({
+            position: { lat: lat, lng: lng },
+            map: map
+        });
+
+        // Update marker with real-time coordinates
+        setInterval(function() {
+            fetch('http://127.0.0.1:5000/get_current_initial_coordinates?device_id=10')
+                .then(response => response.json())
+                .then(data => {
+                    var lat = data.latitude;
+                    var lng = data.longitude;
+                    
+                    map.setCenter({ lat: lat, lng: lng });
+                    mark.setPosition({ lat: lat, lng: lng });
+                    
+                    lineCoords.push(new google.maps.LatLng(lat, lng));
+                    
+                    var lineCoordinatesPath = new google.maps.Polyline({
+                        path: lineCoords,
+                        geodesic: true,
+                        strokeColor: '#10FEE2'
+                    });
+                    
+                    lineCoordinatesPath.setMap(map);
+                })
+                .catch(error => console.error('Error fetching data:', error));
+        }, 5000); // Fetch data every 5 seconds
+    };
+    
+    var redraw = function(payload) {
+        if (payload.message.lat) {
+            var lat = payload.message.lat;
+            var lng = payload.message.lng;
+            
+            map.setCenter({ lat: lat, lng: lng });
+            mark.setPosition({ lat: lat, lng: lng });
+            
+            lineCoords.push(new google.maps.LatLng(lat, lng));
+            
+            var lineCoordinatesPath = new google.maps.Polyline({
+                path: lineCoords,
+                geodesic: true,
+                strokeColor: '#10FEE2'
+            });
+            
+            lineCoordinatesPath.setMap(map);
+        }
+    };
+    
+    var pnChannel = "raspi-tracker";
+    
+    var pubnub = new PubNub({
+        publishKey: 'pub-c-70655352-7883-4026-a54e-e70ef9b7a5ac',
+        subscribeKey: 'sub-c-1df2d92f-5153-43ee-af0e-5259e5b5b266'
+    });
+    
+    document.querySelector('#action').addEventListener('click', function() {
+        var text = document.getElementById("action").textContent;
+        if (text === "Start Tracking") {
+            pubnub.subscribe({ channels: [pnChannel] });
+            pubnub.addListener({ message: redraw });
+            document.getElementById("action").classList.add('btn-danger');
+            document.getElementById("action").classList.remove('btn-success');
+            document.getElementById("action").textContent = 'Stop Tracking';
+        } else {
+            pubnub.unsubscribe({ channels: [pnChannel] });
+            document.getElementById("action").classList.remove('btn-danger');
+            document.getElementById("action").classList.add('btn-success');
+            document.getElementById("action").textContent = 'Start Tracking';
+        }
+    });
+</script>
+
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCN5ri2E7xT1WLK1C_S1PHjnurHmclw7zM&callback=initializeMap"></script>
+
+</body>
+</html>
